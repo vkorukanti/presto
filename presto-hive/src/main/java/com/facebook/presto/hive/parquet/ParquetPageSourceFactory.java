@@ -284,7 +284,7 @@ public class ParquetPageSourceFactory
                     List<String> nestedColumnPath = nestedColumnPath(pushedDownSubfield);
                     Optional<ColumnIO> columnIO = findNestedColumnIO(lookupColumnByName(messageColumnIO, pushedDownSubfield.getRootName()), nestedColumnPath);
                     if (columnIO.isPresent()) {
-                        fieldsBuilder.add(constructField(type, columnIO.get()));
+                        fieldsBuilder.add(constructField(type, columnIO.get(), true));
                     }
                     else {
                         fieldsBuilder.add(Optional.empty());
@@ -292,7 +292,7 @@ public class ParquetPageSourceFactory
                 }
                 else if (getParquetType(type, fileSchema, useParquetColumnNames, column, tableName, path).isPresent()) {
                     String columnName = useParquetColumnNames ? name : fileSchema.getFields().get(column.getHiveColumnIndex()).getName();
-                    fieldsBuilder.add(constructField(type, lookupColumnByName(messageColumnIO, columnName)));
+                    fieldsBuilder.add(constructField(type, lookupColumnByName(messageColumnIO, columnName), false));
                 }
                 else {
                     fieldsBuilder.add(Optional.empty());

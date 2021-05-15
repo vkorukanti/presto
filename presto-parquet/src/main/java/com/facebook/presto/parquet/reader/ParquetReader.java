@@ -313,6 +313,53 @@ public class ParquetReader
         return readColumnChunk(field).getBlock();
     }
 
+    /**
+     * Directly return a nested column as block. This is when subfield within a struct is pushed down
+     * to the reader. As we are reading the nested column, the column Reader only returns null or non-null
+     * values. If the parent of the subfield is null, the Block doesn't contain any values. We need to look
+     * at the definition levels to insert nulls in places where the parent of subfield is null.
+     * Ex:
+     *    Schema: struct(int a) msg
+     *    Values in File:
+     *            Rows: [msg(a=1)], [msg(a=2)], [msg(a=null)], [null]
+     *    Column reader returned ColumnChunk for `msg.a` contains
+     *        Block: count = 3, [1, 2, null] (even though there are 4 rows)
+     *        Definition Levels: count = 4, [2, 2, 1, 0]
+     *        Repetition Levels: count = 4, [0, 0, 0, 0]
+     *
+     *    This function converts the Block to: count = 4, [1, 2, null, null]
+     * @param field
+     * @return
+     * @throws IOException
+     */
+    public Block readPushedDownSubfieldBlock(Field field)
+            throws IOException
+    {
+        checkArgument(field.isPushedDownSubfield(), "input is expected to be a pushed down subfield");
+        ColumnChunk columnChunk = readColumnChunk(field);
+
+        String typeBase = field.getType().getTypeSignature().getBase();
+        if (ROW.equals(typeBase) || MAP.equals(typeBase) || ARRAY.equals(typeBase)) {
+            // for non-primitive types, postprocessing already handles the cases where the selected
+            // subfield's parent field has null values.
+            return columnChunk.getBlock();
+        }
+
+        BlockBuilder blockBuilder = field.getType().createBlockBuilder(null, nextBatchSize);
+        int valueIndex = 0;
+        for (int i = 0; i < columnChunk.getDefinitionLevels().length; i++) {
+            int definitionLevel = columnChunk.getDefinitionLevels()[i];
+            if (definitionLevel < field.getDefinitionLevel()) {
+                blockBuilder.appendNull();
+            }
+            else {
+                field.getType().appendTo(columnChunk.getBlock(), valueIndex, blockBuilder);
+                valueIndex++;
+            }
+        }
+        return blockBuilder.build();
+    }
+
     private ColumnChunk readColumnChunk(Field field)
             throws IOException
     {

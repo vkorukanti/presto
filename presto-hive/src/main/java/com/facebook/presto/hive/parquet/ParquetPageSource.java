@@ -179,7 +179,13 @@ public class ParquetPageSource
             checkState(batchId == expectedBatchId);
 
             try {
-                Block block = parquetReader.readBlock(field);
+                Block block;
+                if (field.isPushedDownSubfield()) {
+                    block = parquetReader.readPushedDownSubfieldBlock(field);
+                }
+                else {
+                    block = parquetReader.readBlock(field);
+                }
                 lazyBlock.setBlock(block);
             }
             catch (ParquetCorruptionException e) {
